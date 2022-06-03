@@ -1,8 +1,134 @@
 import Head from 'next/head'
 import Image from 'next/image'
 import styles from '../styles/Home.module.css'
+import React, { useState } from "react";
+import { ethers } from "ethers";
+import { useEffect } from 'react/cjs/react.production.min';
+import { ABI, NFT_CONTRACT_ADDRESS } from "../constants";
 
 export default function Home() {
+
+  const [walletConnected, setWalletConnected] = useState(false);
+  const [presaleStarted, setPresaleStarted] = useState(false);
+  const [presaleEnded, setPresaleEnded] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [isOwner, setIsOwner] = useState(false);
+  const [tokenIdsMinted, setTokenIdsMinted] = useState("0");
+
+  async function connectWallet() {
+    try {
+      const { ethereum } = window;
+      const accounts = await ethereum.request({ method: "eth_requestAccounts" });
+      if (accounts.length > 0) {
+        setWalletConnected(accounts[0]);
+      }
+    } catch (error) {
+      console.log(error);
+    }
+  }
+
+  async function checkIfWalletIsConnected() {
+    try {
+      const { ethereum } = window;
+      const accounts = await ethereum.request({ method: "eth_accounts" });
+      if (accounts.length > 0) {
+        setWalletConnected(accounts[0]);
+      }
+    } catch (error) {
+      console.log(error);
+    }
+  }
+
+  async function getProviderOrSigner(needSigner = false) {
+    try {
+      const { ethereum } = window;
+      const web3Provider = new ethers.providers.Web3Provider(ethereum);
+      const network = await web3Provider.getNetwork();
+      if (network.chainId !== 4) {
+        alert("please connect with rinkeby");
+      } else {
+        if (needSigner) {
+          const signer = web3Provider.getSigner();
+          return signer;
+        } else {
+          return web3Provider;
+        }
+      }
+    } catch (error) {
+      console.log(error);
+    }
+  }
+
+  /**
+   * mints an nft during presale
+   */
+
+  async function presaleMint() {
+    try {
+      const signer = await getProviderOrSigner(true);
+      const nftContract = new ethers.Contract(
+        NFT_CONTRACT_ADDRESS,
+        ABI,
+        signer
+      )
+      const tx = await nftContract.presaleMint({
+        value: ethers.utils.parseEther("0.01")
+      })
+      setLoading(true);
+      await tx.wait();
+      setLoading(false);
+      window.alert("you successfully minted crypto devs NFT");
+    } catch (error) {
+      console.log(error);
+    }
+  }
+
+  /**
+   * mints an NFT during public sale
+   */
+
+  async function mint() {
+    try {
+      const signer = await getProviderOrSigner(true);
+      const nftContract = new ethers.Contract(
+        NFT_CONTRACT_ADDRESS,
+        ABI,
+        signer
+      );
+      const tx = await nftContract.mint({
+        value: ethers.utils.parseEther("0.01")
+      })
+      setLoading(true);
+      await tx.wait();
+      setLoading(false);
+      window.alert("you successfully minted crypto devs NFT");
+
+    } catch (error) {
+      console.log(error);
+    }
+  }
+  async function startPresale() {
+    try {
+      const signer = await getProviderOrSigner(true);
+      const nftContract = new ethers.Contract(
+        NFT_CONTRACT_ADDRESS,
+        ABI,
+        signer
+      )
+      const tx = await nftContract.startPresale();
+      setLoading(true);
+      await tx.wait();
+      setLoading(false);
+    } catch (error) {
+      console.log(error);
+    }
+  }
+  useEffect(() => {
+    if (!walletConnected) {
+      checkIfWalletIsConnected();
+    }
+  }, []);
+
   return (
     <div className={styles.container}>
       <Head>
