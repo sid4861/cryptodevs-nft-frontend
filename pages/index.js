@@ -1,9 +1,8 @@
 import Head from 'next/head'
 import Image from 'next/image'
 import styles from '../styles/Home.module.css'
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { ethers } from "ethers";
-import { useEffect } from 'react/cjs/react.production.min';
 import { ABI, NFT_CONTRACT_ADDRESS } from "../constants";
 
 export default function Home() {
@@ -31,6 +30,7 @@ export default function Home() {
     try {
       const { ethereum } = window;
       const accounts = await ethereum.request({ method: "eth_accounts" });
+      console.log({accounts});
       if (accounts.length > 0) {
         setWalletConnected(accounts[0]);
       }
@@ -123,72 +123,215 @@ export default function Home() {
       console.log(error);
     }
   }
+  async function checkIfPresaleStarted() {
+    try {
+      const provider = await getProviderOrSigner();
+      const nftContract = new ethers.Contract(
+        NFT_CONTRACT_ADDRESS,
+        ABI,
+        provider
+      )
+      const _presaleStarted = await nftContract.presaleStarted();
+      if (!_presaleStarted) {
+        console.log("calling getowner");
+        await getOwner();
+      }
+      setPresaleStarted(_presaleStarted);
+      return _presaleStarted;
+    } catch (error) {
+      console.log(error);
+      return false;
+    }
+  }
+
+  /**
+   * checkIfPresaleEnded: checks if the presale has ended by quering the `presaleEnded`
+   * variable in the contract
+   */
+  async function checkIfPresaleEnded() {
+    try {
+      const provider = await getProviderOrSigner();
+      const nftContract = new ethers.Contract(
+        NFT_CONTRACT_ADDRESS,
+        ABI,
+        provider
+      );
+      const _presaleEnded = await nftContract.presaleEnded();
+      const hasEnded = _presaleEnded.lt(Math.floor(Date.now() / 1000));
+      if (hasEnded) {
+        setPresaleEnded(true);
+      } else {
+        setPresaleEnded(false);
+      }
+
+      return hasEnded;
+
+    } catch (error) {
+      console.log(error);
+    }
+  }
+  /**
+   * returns owner address
+   */
+  async function getOwner() {
+    try {
+      const provider = await getProviderOrSigner();
+      const nftContract = new ethers.Contract(
+        NFT_CONTRACT_ADDRESS,
+        ABI,
+        provider
+      );
+      const _owner = await nftContract.owner();
+      console.log("contract owner", _owner);
+      const signer = await getProviderOrSigner(true);
+      const signerAddress = await signer.getAddress();
+      console.log("signer address", signerAddress);
+      if (_owner.toLowerCase() === signerAddress.toLowerCase()) {
+        setIsOwner(true);
+      }
+    } catch (error) {
+      console.log(error);
+    }
+  }
+
+  /**
+   * getTokenIdsMinted: gets the number of tokenIds that have been minted
+   */
+
+  async function getTokenIdsMinted() {
+    try {
+      const provider = await getProviderOrSigner();
+      const nftContract = new ethers.Contract(
+        NFT_CONTRACT_ADDRESS,
+        ABI,
+        provider
+      );
+      const _tokenIdsMinted = await nftContract.tokenIds();
+      setTokenIdsMinted(_tokenIdsMinted.toString());
+    } catch (error) {
+      console.log(error);
+    }
+  }
+  //use effects
   useEffect(() => {
     if (!walletConnected) {
+      console.log("not connected");
       checkIfWalletIsConnected();
     }
   }, []);
 
+
+  useEffect(() => {
+    const _presaleStarted = checkIfPresaleStarted();
+    // if (_presaleStarted) {
+      checkIfPresaleEnded();
+    // }
+
+    getTokenIdsMinted();
+
+    const presaleEndedInterval = setInterval(async () => {
+      const _presaleStarted = await checkIfPresaleStarted();
+      // if (_presaleStarted) {
+        const _presaleEnded = await checkIfPresaleEnded();
+        if (_presaleEnded) {
+          clearInterval(presaleEndedInterval);
+        }
+      // }
+    }, 5000)
+
+    // set an interval to get the number of token Ids minted every 5 seconds
+    setInterval(async function () {
+      await getTokenIdsMinted();
+    }, 5 * 1000);
+
+  }, [])
+
+  /*
+    renderButton: Returns a button based on the state of the dapp
+  */
+  const renderButton = () => {
+    // If wallet is not connected, return a button which allows them to connect their wllet
+    if (!walletConnected) {
+      return (
+        <button onClick={connectWallet} className={styles.button}>
+          Connect your wallet
+        </button>
+      );
+    }
+
+    // If we are currently waiting for something, return a loading button
+    if (loading) {
+      return <button className={styles.button}>Loading...</button>;
+    }
+
+    // If connected user is the owner, and presale hasnt started yet, allow them to start the presale
+    if (isOwner && !presaleStarted) {
+      return (
+        <button className={styles.button} onClick={startPresale}>
+          Start Presale!
+        </button>
+      );
+    }
+
+    // If connected user is not the owner but presale hasn't started yet, tell them that
+    if (!presaleStarted) {
+      return (
+        <div>
+          <div className={styles.description}>Presale hasnt started!</div>
+        </div>
+      );
+    }
+
+    // If presale started, but hasn't ended yet, allow for minting during the presale period
+    if (presaleStarted && !presaleEnded) {
+      return (
+        <div>
+          <div className={styles.description}>
+            Presale has started!!! If your address is whitelisted, Mint a
+            Crypto Dev 🥳
+          </div>
+          <button className={styles.button} onClick={presaleMint}>
+            Presale Mint 🚀
+          </button>
+        </div>
+      );
+    }
+
+    // If presale started and has ended, its time for public minting
+    if (presaleEnded) {
+      return (
+        <button className={styles.button} onClick={mint}>
+          Public Mint 🚀
+        </button>
+      );
+    }
+  };
+
   return (
-    <div className={styles.container}>
+    <div>
       <Head>
-        <title>Create Next App</title>
-        <meta name="description" content="Generated by create next app" />
+        <title>Crypto Devs</title>
+        <meta name="description" content="Whitelist-Dapp" />
         <link rel="icon" href="/favicon.ico" />
       </Head>
-
-      <main className={styles.main}>
-        <h1 className={styles.title}>
-          Welcome to <a href="https://nextjs.org">Next.js!</a>
-        </h1>
-
-        <p className={styles.description}>
-          Get started by editing{' '}
-          <code className={styles.code}>pages/index.js</code>
-        </p>
-
-        <div className={styles.grid}>
-          <a href="https://nextjs.org/docs" className={styles.card}>
-            <h2>Documentation &rarr;</h2>
-            <p>Find in-depth information about Next.js features and API.</p>
-          </a>
-
-          <a href="https://nextjs.org/learn" className={styles.card}>
-            <h2>Learn &rarr;</h2>
-            <p>Learn about Next.js in an interactive course with quizzes!</p>
-          </a>
-
-          <a
-            href="https://github.com/vercel/next.js/tree/canary/examples"
-            className={styles.card}
-          >
-            <h2>Examples &rarr;</h2>
-            <p>Discover and deploy boilerplate example Next.js projects.</p>
-          </a>
-
-          <a
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=default-template&utm_campaign=create-next-app"
-            className={styles.card}
-          >
-            <h2>Deploy &rarr;</h2>
-            <p>
-              Instantly deploy your Next.js site to a public URL with Vercel.
-            </p>
-          </a>
+      <div className={styles.main}>
+        <div>
+          <h1 className={styles.title}>Welcome to Crypto Devs!</h1>
+          <div className={styles.description}>
+            Its an NFT collection for developers in Crypto.
+          </div>
+          <div className={styles.description}>
+            {tokenIdsMinted}/20 have been minted
+          </div>
+          {renderButton()}
         </div>
-      </main>
+        <div>
+          <img className={styles.image} src="./cryptodevs/0.svg" />
+        </div>
+      </div>
 
       <footer className={styles.footer}>
-        <a
-          href="https://vercel.com?utm_source=create-next-app&utm_medium=default-template&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Powered by{' '}
-          <span className={styles.logo}>
-            <Image src="/vercel.svg" alt="Vercel Logo" width={72} height={16} />
-          </span>
-        </a>
+        Made with &#10084; by Crypto Devs
       </footer>
     </div>
   )
